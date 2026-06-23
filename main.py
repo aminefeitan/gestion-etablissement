@@ -7,6 +7,8 @@ from datetime import datetime
 from pathlib import Path
 from tkinter import messagebox, ttk
 
+import customtkinter as ctk
+
 try:
     import matplotlib.pyplot as plt
     import numpy as np
@@ -32,399 +34,917 @@ try:
 except ModuleNotFoundError:
     DateEntry = None
 
-
+# ──────────────────────────────────────────────────────────────
+# Paths & Constants
+# ──────────────────────────────────────────────────────────────
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "main.db"
 SIGNATURE_PATH = BASE_DIR / "signature.jpg"
 
-APP_TITLE = "Gestion des étudiants"
+APP_TITLE = "Gestion des Étudiants"
 PASSING_GRADE = 10
 MIN_GRADE = 0
 MAX_GRADE = 20
 
+# ──────────────────────────────────────────────────────────────
+# Dark-Mode Color Palette
+# ──────────────────────────────────────────────────────────────
 COLORS = {
-    "bg": "#f5f7fb",
-    "panel": "#ffffff",
-    "text": "#1f2937",
-    "muted": "#6b7280",
-    "accent": "#1f6f8b",
-    "accent_hover": "#155e75",
-    "success": "#15803d",
-    "danger": "#b91c1c",
-    "border": "#d9e2ec",
-    "header": "#eef7fa",
+    # Backgrounds
+    "bg_primary": "#0f1117",
+    "bg_secondary": "#1a1b2e",
+    "bg_card": "#252742",
+    "bg_input": "#1e2040",
+    "bg_hover": "#2d2f54",
+    "bg_sidebar": "#12131f",
+    "bg_sidebar_active": "#1e2040",
+    # Text
+    "text_primary": "#e8eaf0",
+    "text_secondary": "#8b8fa3",
+    "text_muted": "#5c5f78",
+    # Accents
+    "accent": "#6c63ff",
+    "accent_hover": "#5a52e0",
+    "accent_glow": "#6c63ff30",
+    "cyan": "#00d4aa",
+    "cyan_dark": "#00b894",
+    # Status
+    "success": "#00d4aa",
+    "success_bg": "#00d4aa18",
+    "danger": "#ff6b6b",
+    "danger_bg": "#ff6b6b18",
+    "warning": "#ffd43b",
+    "warning_bg": "#ffd43b18",
+    "info": "#74b9ff",
+    "info_bg": "#74b9ff18",
+    # Borders
+    "border": "#2d2f54",
+    "border_light": "#3d3f64",
+    # Table
+    "table_header": "#1a1b2e",
+    "table_row_alt": "#1e2040",
+    "table_row": "#252742",
+    "table_selected": "#6c63ff30",
+}
+
+# Icons (Unicode)
+ICONS = {
+    "dashboard": "📊",
+    "students": "🎓",
+    "branches": "🏛️",
+    "subjects": "📚",
+    "grades": "📝",
+    "ranking": "🏆",
+    "statistics": "📈",
+    "reports": "📄",
+    "search": "🔍",
+    "add": "➕",
+    "refresh": "🔄",
+    "success": "✅",
+    "error": "❌",
+    "info": "ℹ️",
+    "warning": "⚠️",
+    "student_metric": "👥",
+    "branch_metric": "🏛️",
+    "subject_metric": "📖",
+    "average_metric": "📊",
 }
 
 
+# ──────────────────────────────────────────────────────────────
+# Toast Notification System
+# ──────────────────────────────────────────────────────────────
+class ToastNotification:
+    """Animated in-app toast notification — replaces messagebox."""
+
+    def __init__(self, parent):
+        self.parent = parent
+        self._current_toast = None
+        self._after_id = None
+
+    def show(self, message, kind="info", duration=3000):
+        self._dismiss_current()
+
+        color_map = {
+            "success": (COLORS["success"], COLORS["success_bg"], ICONS["success"]),
+            "error": (COLORS["danger"], COLORS["danger_bg"], ICONS["error"]),
+            "info": (COLORS["info"], COLORS["info_bg"], ICONS["info"]),
+            "warning": (COLORS["warning"], COLORS["warning_bg"], ICONS["warning"]),
+        }
+        fg, bg, icon = color_map.get(kind, color_map["info"])
+
+        toast = tk.Frame(
+            self.parent,
+            bg=bg,
+            highlightbackground=fg,
+            highlightthickness=1,
+            padx=18,
+            pady=12,
+        )
+
+        tk.Label(
+            toast,
+            text=f"{icon}  {message}",
+            bg=bg,
+            fg=fg,
+            font=("Segoe UI Semibold", 11),
+            anchor="w",
+        ).pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        close_btn = tk.Label(
+            toast,
+            text="✕",
+            bg=bg,
+            fg=COLORS["text_muted"],
+            font=("Segoe UI", 12),
+            cursor="hand2",
+        )
+        close_btn.pack(side=tk.RIGHT, padx=(12, 0))
+        close_btn.bind("<Button-1>", lambda _: self._dismiss_current())
+
+        toast.place(relx=0.5, rely=0.0, anchor="n", y=-60)
+        self._current_toast = toast
+
+        # Animate in
+        self._slide_in(toast, target_y=16, current_y=-60, step=8)
+        self._after_id = self.parent.after(duration, self._dismiss_current)
+
+    def _slide_in(self, widget, target_y, current_y, step):
+        if current_y < target_y:
+            current_y = min(current_y + step, target_y)
+            try:
+                widget.place_configure(y=current_y)
+                self.parent.after(12, self._slide_in, widget, target_y, current_y, step)
+            except tk.TclError:
+                pass
+
+    def _slide_out(self, widget, current_y, step):
+        if current_y > -70:
+            current_y -= step
+            try:
+                widget.place_configure(y=current_y)
+                self.parent.after(10, self._slide_out, widget, current_y, step)
+            except tk.TclError:
+                pass
+        else:
+            try:
+                widget.destroy()
+            except tk.TclError:
+                pass
+
+    def _dismiss_current(self):
+        if self._after_id:
+            try:
+                self.parent.after_cancel(self._after_id)
+            except (tk.TclError, ValueError):
+                pass
+            self._after_id = None
+        if self._current_toast:
+            self._slide_out(self._current_toast, 16, 10)
+            self._current_toast = None
+
+
+# ──────────────────────────────────────────────────────────────
+# Main Application
+# ──────────────────────────────────────────────────────────────
 class StudentManagerApp:
+    # Navigation items: (key, icon, label)
+    NAV_ITEMS = [
+        ("dashboard", ICONS["dashboard"], "Tableau de bord"),
+        ("students", ICONS["students"], "Étudiants"),
+        ("branches", ICONS["branches"], "Branches"),
+        ("subjects", ICONS["subjects"], "Matières"),
+        ("grades", ICONS["grades"], "Notes"),
+        ("ranking", ICONS["ranking"], "Classements"),
+        ("statistics", ICONS["statistics"], "Statistiques"),
+        ("reports", ICONS["reports"], "Relevés"),
+    ]
+
     def __init__(self, root):
         self.root = root
         self.root.title(APP_TITLE)
-        self.root.geometry("1040x720")
-        self.root.minsize(940, 620)
-        self.root.configure(bg=COLORS["bg"])
+        self.root.geometry("1140x760")
+        self.root.minsize(1020, 660)
+        self.root.configure(bg=COLORS["bg_primary"])
 
+        # Database
         self.conn = sqlite3.connect(DB_PATH)
         self.conn.execute("PRAGMA foreign_keys = ON")
-        self.cursor = self.conn.cursor()
+        self.conn.execute("PRAGMA journal_mode = WAL")
+        self.conn.row_factory = sqlite3.Row
 
+        # State
         self.inputs = {}
         self.metric_vars = {}
+        self.pages = {}
+        self.nav_buttons = {}
+        self.current_page = None
 
-        self.configure_styles()
+        # Init
         self.create_tables()
         self.build_ui()
+        self.toast = ToastNotification(self.content_area)
         self.update_combobox_values()
-        self.refresh_dashboard()
+        self.navigate("dashboard")
 
         self.root.protocol("WM_DELETE_WINDOW", self.close)
 
-    def configure_styles(self):
-        style = ttk.Style(self.root)
-        try:
-            style.theme_use("clam")
-        except tk.TclError:
-            pass
+    # ──────────────────────────────────────────────────────────
+    # Database Setup
+    # ──────────────────────────────────────────────────────────
+    def create_tables(self):
+        with self.conn:
+            self.conn.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS branche (
+                    code TEXT PRIMARY KEY,
+                    nom  TEXT UNIQUE
+                );
+                CREATE TABLE IF NOT EXISTS etudiant (
+                    code_massar    TEXT PRIMARY KEY,
+                    nom_arabe      TEXT,
+                    nom_francais   TEXT,
+                    genre          TEXT,
+                    lieu_naissance TEXT,
+                    date_naissance DATE,
+                    code_branche   TEXT,
+                    FOREIGN KEY (code_branche) REFERENCES branche(code)
+                );
+                CREATE TABLE IF NOT EXISTS matiere (
+                    code        TEXT PRIMARY KEY,
+                    nom         TEXT UNIQUE,
+                    coefficient REAL
+                );
+                CREATE TABLE IF NOT EXISTS note (
+                    code_massar  TEXT,
+                    code_matiere TEXT,
+                    note         REAL,
+                    FOREIGN KEY (code_massar)  REFERENCES etudiant(code_massar),
+                    FOREIGN KEY (code_matiere) REFERENCES matiere(code)
+                );
+                CREATE INDEX IF NOT EXISTS idx_etudiant_branche ON etudiant(code_branche);
+                CREATE INDEX IF NOT EXISTS idx_note_student     ON note(code_massar);
+                CREATE INDEX IF NOT EXISTS idx_note_subject     ON note(code_matiere);
+                """
+            )
 
-        style.configure(".", font=("Segoe UI", 10), foreground=COLORS["text"])
-        style.configure("App.TFrame", background=COLORS["bg"])
-        style.configure("Panel.TFrame", background=COLORS["panel"], relief="flat")
-        style.configure("Header.TFrame", background=COLORS["bg"])
-        style.configure("Card.TFrame", background=COLORS["panel"], relief="flat")
-        style.configure("TLabel", background=COLORS["panel"], foreground=COLORS["text"])
-        style.configure("Muted.TLabel", background=COLORS["panel"], foreground=COLORS["muted"])
-        style.configure("Title.TLabel", background=COLORS["bg"], foreground=COLORS["text"], font=("Segoe UI Semibold", 20))
-        style.configure("MetricValue.TLabel", background=COLORS["panel"], foreground=COLORS["accent"], font=("Segoe UI Semibold", 18))
-        style.configure("MetricLabel.TLabel", background=COLORS["panel"], foreground=COLORS["muted"], font=("Segoe UI", 9))
-        style.configure("TLabelframe", background=COLORS["panel"], bordercolor=COLORS["border"], relief="solid")
-        style.configure("TLabelframe.Label", background=COLORS["panel"], foreground=COLORS["accent"], font=("Segoe UI Semibold", 10))
-        style.configure("TNotebook", background=COLORS["bg"], borderwidth=0)
-        style.configure("TNotebook.Tab", padding=(18, 10), background="#e9eef5", foreground=COLORS["muted"])
+    # ──────────────────────────────────────────────────────────
+    # UI Layout
+    # ──────────────────────────────────────────────────────────
+    def build_ui(self):
+        # Main container
+        main = tk.Frame(self.root, bg=COLORS["bg_primary"])
+        main.pack(fill=tk.BOTH, expand=True)
+        main.columnconfigure(1, weight=1)
+        main.rowconfigure(0, weight=1)
+
+        # Sidebar
+        self.build_sidebar(main)
+
+        # Content area
+        self.content_area = tk.Frame(main, bg=COLORS["bg_primary"], padx=28, pady=22)
+        self.content_area.grid(row=0, column=1, sticky="nsew")
+        self.content_area.columnconfigure(0, weight=1)
+        self.content_area.rowconfigure(0, weight=1)
+
+        # Build all pages
+        self.build_dashboard_page()
+        self.build_student_page()
+        self.build_branch_page()
+        self.build_subject_page()
+        self.build_grade_page()
+        self.build_ranking_page()
+        self.build_statistics_page()
+        self.build_report_page()
+
+    # ──────────────────────────────────────────────────────────
+    # Sidebar
+    # ──────────────────────────────────────────────────────────
+    def build_sidebar(self, parent):
+        sidebar = tk.Frame(parent, bg=COLORS["bg_sidebar"], width=230)
+        sidebar.grid(row=0, column=0, sticky="ns")
+        sidebar.grid_propagate(False)
+
+        # App branding
+        brand_frame = tk.Frame(sidebar, bg=COLORS["bg_sidebar"], pady=24, padx=20)
+        brand_frame.pack(fill=tk.X)
+
+        tk.Label(
+            brand_frame,
+            text="🎓",
+            bg=COLORS["bg_sidebar"],
+            fg=COLORS["accent"],
+            font=("Segoe UI", 28),
+        ).pack(anchor="w")
+        tk.Label(
+            brand_frame,
+            text="Gestion des",
+            bg=COLORS["bg_sidebar"],
+            fg=COLORS["text_primary"],
+            font=("Segoe UI Semibold", 14),
+            anchor="w",
+        ).pack(fill=tk.X, pady=(8, 0))
+        tk.Label(
+            brand_frame,
+            text="Étudiants",
+            bg=COLORS["bg_sidebar"],
+            fg=COLORS["accent"],
+            font=("Segoe UI Bold", 16),
+            anchor="w",
+        ).pack(fill=tk.X)
+
+        # Separator
+        tk.Frame(sidebar, bg=COLORS["border"], height=1).pack(fill=tk.X, padx=16, pady=(4, 12))
+
+        # Navigation
+        nav_frame = tk.Frame(sidebar, bg=COLORS["bg_sidebar"])
+        nav_frame.pack(fill=tk.BOTH, expand=True, padx=10)
+
+        for key, icon, label in self.NAV_ITEMS:
+            btn = self._create_nav_button(nav_frame, key, icon, label)
+            btn.pack(fill=tk.X, pady=2)
+
+        # Bottom info
+        tk.Frame(sidebar, bg=COLORS["border"], height=1).pack(fill=tk.X, padx=16, pady=(8, 12))
+        tk.Label(
+            sidebar,
+            text=f"📁 {DB_PATH.name}",
+            bg=COLORS["bg_sidebar"],
+            fg=COLORS["text_muted"],
+            font=("Segoe UI", 9),
+            anchor="w",
+            padx=20,
+        ).pack(fill=tk.X, pady=(0, 6))
+
+        # Refresh button at bottom
+        refresh_frame = tk.Frame(sidebar, bg=COLORS["bg_sidebar"], padx=16, pady=12)
+        refresh_frame.pack(fill=tk.X, side=tk.BOTTOM)
+        refresh_btn = tk.Label(
+            refresh_frame,
+            text=f"{ICONS['refresh']}  Actualiser",
+            bg=COLORS["bg_sidebar"],
+            fg=COLORS["text_secondary"],
+            font=("Segoe UI", 10),
+            cursor="hand2",
+            padx=14,
+            pady=8,
+        )
+        refresh_btn.pack(fill=tk.X)
+        refresh_btn.bind("<Button-1>", lambda _: self.refresh_all())
+        refresh_btn.bind("<Enter>", lambda e: e.widget.configure(fg=COLORS["accent"]))
+        refresh_btn.bind("<Leave>", lambda e: e.widget.configure(fg=COLORS["text_secondary"]))
+
+    def _create_nav_button(self, parent, key, icon, label):
+        btn = tk.Frame(parent, bg=COLORS["bg_sidebar"], cursor="hand2", padx=14, pady=10)
+
+        text_label = tk.Label(
+            btn,
+            text=f"{icon}   {label}",
+            bg=COLORS["bg_sidebar"],
+            fg=COLORS["text_secondary"],
+            font=("Segoe UI", 11),
+            anchor="w",
+        )
+        text_label.pack(fill=tk.X)
+
+        # Active indicator
+        indicator = tk.Frame(btn, bg=COLORS["bg_sidebar"], width=3, height=0)
+        indicator.place(x=0, rely=0.15, relheight=0.7)
+
+        self.nav_buttons[key] = {"frame": btn, "label": text_label, "indicator": indicator}
+
+        for widget in (btn, text_label):
+            widget.bind("<Button-1>", lambda _, k=key: self.navigate(k))
+            widget.bind(
+                "<Enter>",
+                lambda e, k=key: self._on_nav_hover(k, True),
+            )
+            widget.bind(
+                "<Leave>",
+                lambda e, k=key: self._on_nav_hover(k, False),
+            )
+
+        return btn
+
+    def _on_nav_hover(self, key, entering):
+        if key == self.current_page:
+            return
+        nav = self.nav_buttons[key]
+        if entering:
+            nav["frame"].configure(bg=COLORS["bg_hover"])
+            nav["label"].configure(bg=COLORS["bg_hover"], fg=COLORS["text_primary"])
+        else:
+            nav["frame"].configure(bg=COLORS["bg_sidebar"])
+            nav["label"].configure(bg=COLORS["bg_sidebar"], fg=COLORS["text_secondary"])
+
+    def navigate(self, page_key):
+        # Deactivate current
+        if self.current_page and self.current_page in self.nav_buttons:
+            prev = self.nav_buttons[self.current_page]
+            prev["frame"].configure(bg=COLORS["bg_sidebar"])
+            prev["label"].configure(bg=COLORS["bg_sidebar"], fg=COLORS["text_secondary"])
+            prev["indicator"].configure(bg=COLORS["bg_sidebar"])
+
+        # Activate new
+        self.current_page = page_key
+        nav = self.nav_buttons[page_key]
+        nav["frame"].configure(bg=COLORS["bg_sidebar_active"])
+        nav["label"].configure(bg=COLORS["bg_sidebar_active"], fg=COLORS["accent"])
+        nav["indicator"].configure(bg=COLORS["accent"])
+
+        # Show page
+        for key, frame in self.pages.items():
+            if key == page_key:
+                frame.grid(row=0, column=0, sticky="nsew")
+            else:
+                frame.grid_forget()
+
+        # Refresh data for specific pages
+        if page_key == "dashboard":
+            self.refresh_dashboard()
+
+    # ──────────────────────────────────────────────────────────
+    # Page Helpers
+    # ──────────────────────────────────────────────────────────
+    def _create_page(self, key):
+        page = tk.Frame(self.content_area, bg=COLORS["bg_primary"])
+        page.columnconfigure(0, weight=1)
+        self.pages[key] = page
+        return page
+
+    def _page_title(self, parent, title, subtitle="", row=0):
+        frame = tk.Frame(parent, bg=COLORS["bg_primary"])
+        frame.grid(row=row, column=0, sticky="ew", pady=(0, 20))
+        tk.Label(
+            frame,
+            text=title,
+            bg=COLORS["bg_primary"],
+            fg=COLORS["text_primary"],
+            font=("Segoe UI Bold", 22),
+            anchor="w",
+        ).pack(fill=tk.X)
+        if subtitle:
+            tk.Label(
+                frame,
+                text=subtitle,
+                bg=COLORS["bg_primary"],
+                fg=COLORS["text_secondary"],
+                font=("Segoe UI", 11),
+                anchor="w",
+            ).pack(fill=tk.X, pady=(4, 0))
+
+    def _card(self, parent, row=0, column=0, colspan=1, padx=(0, 0), pady=(0, 0), sticky="nsew"):
+        card = tk.Frame(
+            parent,
+            bg=COLORS["bg_card"],
+            highlightbackground=COLORS["border"],
+            highlightthickness=1,
+            padx=20,
+            pady=18,
+        )
+        card.grid(row=row, column=column, columnspan=colspan, padx=padx, pady=pady, sticky=sticky)
+        return card
+
+    def _section_label(self, parent, text, row=0, pady=(0, 12)):
+        tk.Label(
+            parent,
+            text=text,
+            bg=COLORS["bg_card"],
+            fg=COLORS["accent"],
+            font=("Segoe UI Semibold", 13),
+            anchor="w",
+        ).grid(row=row, column=0, columnspan=2, sticky="w", pady=pady)
+
+    def _form_label(self, parent, text, row):
+        tk.Label(
+            parent,
+            text=text,
+            bg=COLORS["bg_card"],
+            fg=COLORS["text_secondary"],
+            font=("Segoe UI", 10),
+            anchor="w",
+        ).grid(row=row, column=0, sticky="w", padx=(0, 16), pady=7)
+
+    def _form_entry(self, parent, key, label, row, placeholder=""):
+        self._form_label(parent, label, row)
+        entry = ctk.CTkEntry(
+            parent,
+            fg_color=COLORS["bg_input"],
+            border_color=COLORS["border"],
+            text_color=COLORS["text_primary"],
+            placeholder_text=placeholder,
+            placeholder_text_color=COLORS["text_muted"],
+            corner_radius=8,
+            height=38,
+            font=("Segoe UI", 11),
+        )
+        entry.grid(row=row, column=1, sticky="ew", pady=7)
+        self.inputs[key] = entry
+        return entry
+
+    def _form_combobox(self, parent, key, label, row, values=()):
+        self._form_label(parent, label, row)
+        combo = ctk.CTkComboBox(
+            parent,
+            values=list(values),
+            fg_color=COLORS["bg_input"],
+            border_color=COLORS["border"],
+            button_color=COLORS["accent"],
+            button_hover_color=COLORS["accent_hover"],
+            dropdown_fg_color=COLORS["bg_card"],
+            dropdown_hover_color=COLORS["bg_hover"],
+            dropdown_text_color=COLORS["text_primary"],
+            text_color=COLORS["text_primary"],
+            corner_radius=8,
+            height=38,
+            font=("Segoe UI", 11),
+            state="readonly",
+        )
+        combo.grid(row=row, column=1, sticky="ew", pady=7)
+        combo.set("")
+        self.inputs[key] = combo
+        return combo
+
+    def _accent_button(self, parent, text, command, row=None, column=None, sticky="e", pady=(18, 0), padx=(0, 0), colspan=1):
+        btn = ctk.CTkButton(
+            parent,
+            text=text,
+            command=command,
+            fg_color=COLORS["accent"],
+            hover_color=COLORS["accent_hover"],
+            text_color="#ffffff",
+            corner_radius=8,
+            height=40,
+            font=("Segoe UI Semibold", 11),
+        )
+        if row is not None:
+            btn.grid(row=row, column=column or 0, columnspan=colspan, sticky=sticky, pady=pady, padx=padx)
+        return btn
+
+    def _secondary_button(self, parent, text, command, row=None, column=None, sticky="e", pady=(0, 0), padx=(0, 0)):
+        btn = ctk.CTkButton(
+            parent,
+            text=text,
+            command=command,
+            fg_color=COLORS["bg_hover"],
+            hover_color=COLORS["border_light"],
+            text_color=COLORS["text_primary"],
+            corner_radius=8,
+            height=38,
+            font=("Segoe UI", 11),
+        )
+        if row is not None:
+            btn.grid(row=row, column=column or 0, sticky=sticky, pady=pady, padx=padx)
+        return btn
+
+    def _build_treeview(self, parent, columns, headings, widths, row=0, height=10):
+        """Build a styled Treeview with scrollbar."""
+        container = tk.Frame(parent, bg=COLORS["bg_card"])
+        container.grid(row=row, column=0, columnspan=len(columns), sticky="nsew", pady=(10, 0))
+        container.rowconfigure(0, weight=1)
+        container.columnconfigure(0, weight=1)
+
+        style = ttk.Style()
+        style.theme_use("clam")
+        style.configure(
+            "Dark.Treeview",
+            background=COLORS["bg_card"],
+            foreground=COLORS["text_primary"],
+            fieldbackground=COLORS["bg_card"],
+            bordercolor=COLORS["border"],
+            rowheight=34,
+            font=("Segoe UI", 10),
+        )
+        style.configure(
+            "Dark.Treeview.Heading",
+            background=COLORS["table_header"],
+            foreground=COLORS["text_secondary"],
+            bordercolor=COLORS["border"],
+            font=("Segoe UI Semibold", 10),
+            relief="flat",
+        )
         style.map(
-            "TNotebook.Tab",
-            background=[("selected", COLORS["panel"])],
+            "Dark.Treeview",
+            background=[("selected", COLORS["table_selected"])],
             foreground=[("selected", COLORS["accent"])],
         )
-        style.configure("TEntry", padding=8, fieldbackground="#ffffff", bordercolor=COLORS["border"])
-        style.configure("TCombobox", padding=8, fieldbackground="#ffffff", bordercolor=COLORS["border"])
-        style.configure("Accent.TButton", padding=(16, 9), background=COLORS["accent"], foreground="#ffffff", borderwidth=0)
         style.map(
-            "Accent.TButton",
-            background=[("active", COLORS["accent_hover"]), ("pressed", COLORS["accent_hover"])],
-            foreground=[("disabled", "#e5e7eb")],
+            "Dark.Treeview.Heading",
+            background=[("active", COLORS["bg_hover"])],
         )
-        style.configure("Secondary.TButton", padding=(14, 8), background="#edf2f7", foreground=COLORS["text"], borderwidth=0)
-        style.map("Secondary.TButton", background=[("active", "#dbeafe")])
-        style.configure("Treeview", rowheight=30, bordercolor=COLORS["border"], fieldbackground="#ffffff", background="#ffffff")
-        style.configure("Treeview.Heading", background=COLORS["header"], foreground=COLORS["text"], font=("Segoe UI Semibold", 10))
 
-    def create_tables(self):
-        self.cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS branche (
-                code TEXT PRIMARY KEY,
-                nom TEXT UNIQUE
-            )
-            """
-        )
-        self.cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS etudiant (
-                code_massar TEXT PRIMARY KEY UNIQUE,
-                nom_arabe TEXT,
-                nom_francais TEXT,
-                genre TEXT,
-                lieu_naissance TEXT,
-                date_naissance DATE,
-                code_branche TEXT,
-                FOREIGN KEY (code_branche) REFERENCES branche(code)
-            )
-            """
-        )
-        self.cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS matiere (
-                code TEXT PRIMARY KEY,
-                nom TEXT UNIQUE,
-                coefficient REAL
-            )
-            """
-        )
-        self.cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS note (
-                code_massar TEXT,
-                code_matiere TEXT,
-                note REAL,
-                FOREIGN KEY (code_massar) REFERENCES etudiant(code_massar),
-                FOREIGN KEY (code_matiere) REFERENCES matiere(code)
-            )
-            """
-        )
-        self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_etudiant_branche ON etudiant(code_branche)")
-        self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_note_student ON note(code_massar)")
-        self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_note_subject ON note(code_matiere)")
-        self.conn.commit()
+        tree = ttk.Treeview(container, columns=columns, show="headings", height=height, style="Dark.Treeview")
+        for col, heading, width in zip(columns, headings, widths):
+            tree.heading(col, text=heading)
+            tree.column(col, width=width, anchor="center" if width < 130 else "w")
 
-    def build_ui(self):
-        container = ttk.Frame(self.root, style="App.TFrame", padding=(22, 18, 22, 16))
-        container.pack(fill=tk.BOTH, expand=True)
-        container.columnconfigure(0, weight=1)
-        container.rowconfigure(1, weight=1)
+        tree.tag_configure("oddrow", background=COLORS["table_row_alt"])
+        tree.tag_configure("evenrow", background=COLORS["table_row"])
+        tree.tag_configure("success", foreground=COLORS["success"])
+        tree.tag_configure("danger", foreground=COLORS["danger"])
 
-        header = ttk.Frame(container, style="Header.TFrame")
-        header.grid(row=0, column=0, sticky="ew", pady=(0, 16))
-        header.columnconfigure(0, weight=1)
+        tree.grid(row=0, column=0, sticky="nsew")
 
-        ttk.Label(header, text=APP_TITLE, style="Title.TLabel").grid(row=0, column=0, sticky="w")
-        ttk.Button(header, text="Actualiser", style="Secondary.TButton", command=self.refresh_all).grid(row=0, column=1, sticky="e")
+        scrollbar = ttk.Scrollbar(container, orient=tk.VERTICAL, command=tree.yview)
+        scrollbar.grid(row=0, column=1, sticky="ns")
+        tree.configure(yscrollcommand=scrollbar.set)
 
-        self.notebook = ttk.Notebook(container)
-        self.notebook.grid(row=1, column=0, sticky="nsew")
+        return tree
 
-        self.create_dashboard_tab()
-        self.create_student_tab()
-        self.create_branch_tab()
-        self.create_subject_tab()
-        self.create_grade_tab()
-        self.create_ranking_tab()
-        self.create_statistics_tab()
-        self.create_report_tab()
+    # ──────────────────────────────────────────────────────────
+    # Dashboard
+    # ──────────────────────────────────────────────────────────
+    def build_dashboard_page(self):
+        page = self._create_page("dashboard")
+        page.rowconfigure(2, weight=1)
 
-        status = ttk.Frame(container, style="App.TFrame")
-        status.grid(row=2, column=0, sticky="ew", pady=(12, 0))
-        status.columnconfigure(0, weight=1)
-        ttk.Label(
-            status,
-            text=f"Base de données : {DB_PATH.name}",
-            background=COLORS["bg"],
-            foreground=COLORS["muted"],
-        ).grid(row=0, column=0, sticky="w")
+        self._page_title(page, "Tableau de bord", "Vue d'ensemble de votre établissement")
 
-    def create_dashboard_tab(self):
-        frame = self.create_tab("Tableau de bord")
-        frame.columnconfigure((0, 1, 2, 3), weight=1, uniform="metrics")
-        frame.rowconfigure(1, weight=1)
+        # Metric cards
+        metrics_frame = tk.Frame(page, bg=COLORS["bg_primary"])
+        metrics_frame.grid(row=1, column=0, sticky="ew", pady=(0, 18))
+        for i in range(4):
+            metrics_frame.columnconfigure(i, weight=1, uniform="metrics")
 
         metrics = [
-            ("students_count", "Étudiants"),
-            ("branches_count", "Branches"),
-            ("subjects_count", "Matières"),
-            ("global_average", "Moyenne générale"),
+            ("students_count", ICONS["student_metric"], "Étudiants", COLORS["accent"]),
+            ("branches_count", ICONS["branch_metric"], "Branches", COLORS["cyan"]),
+            ("subjects_count", ICONS["subject_metric"], "Matières", COLORS["warning"]),
+            ("global_average", ICONS["average_metric"], "Moyenne Générale", COLORS["success"]),
         ]
-        for col, (key, label) in enumerate(metrics):
-            card = ttk.Frame(frame, style="Card.TFrame", padding=(18, 16))
-            card.grid(row=0, column=col, sticky="ew", padx=(0 if col == 0 else 10, 0), pady=(0, 18))
-            self.metric_vars[key] = tk.StringVar(value="0")
-            ttk.Label(card, textvariable=self.metric_vars[key], style="MetricValue.TLabel").pack(anchor="w")
-            ttk.Label(card, text=label, style="MetricLabel.TLabel").pack(anchor="w", pady=(6, 0))
 
-        recent_box = ttk.LabelFrame(frame, text="Derniers étudiants", padding=12)
-        recent_box.grid(row=1, column=0, columnspan=4, sticky="nsew")
-        recent_box.rowconfigure(0, weight=1)
-        recent_box.columnconfigure(0, weight=1)
+        for col, (key, icon, label, color) in enumerate(metrics):
+            card = tk.Frame(
+                metrics_frame,
+                bg=COLORS["bg_card"],
+                highlightbackground=COLORS["border"],
+                highlightthickness=1,
+                padx=20,
+                pady=16,
+            )
+            card.grid(row=0, column=col, sticky="ew", padx=(0 if col == 0 else 8, 8 if col < 3 else 0))
+
+            # Colored top border accent
+            accent_bar = tk.Frame(card, bg=color, height=3)
+            accent_bar.pack(fill=tk.X, pady=(0, 12))
+
+            top = tk.Frame(card, bg=COLORS["bg_card"])
+            top.pack(fill=tk.X)
+
+            tk.Label(
+                top,
+                text=icon,
+                bg=COLORS["bg_card"],
+                font=("Segoe UI", 22),
+                anchor="w",
+            ).pack(side=tk.LEFT)
+
+            self.metric_vars[key] = tk.StringVar(value="0")
+            tk.Label(
+                top,
+                textvariable=self.metric_vars[key],
+                bg=COLORS["bg_card"],
+                fg=color,
+                font=("Segoe UI Bold", 24),
+                anchor="e",
+            ).pack(side=tk.RIGHT)
+
+            tk.Label(
+                card,
+                text=label,
+                bg=COLORS["bg_card"],
+                fg=COLORS["text_secondary"],
+                font=("Segoe UI", 10),
+                anchor="w",
+            ).pack(fill=tk.X, pady=(8, 0))
+
+        # Recent students table
+        table_card = self._card(page, row=2, column=0, pady=(0, 0))
+        table_card.columnconfigure(0, weight=1)
+        table_card.rowconfigure(1, weight=1)
+
+        self._section_label(table_card, "📋  Derniers étudiants inscrits")
 
         columns = ("code", "nom", "branche", "genre")
-        self.recent_tree = ttk.Treeview(recent_box, columns=columns, show="headings", height=9)
-        self.recent_tree.heading("code", text="Code Massar")
-        self.recent_tree.heading("nom", text="Nom français")
-        self.recent_tree.heading("branche", text="Branche")
-        self.recent_tree.heading("genre", text="Genre")
-        self.recent_tree.column("code", width=150, anchor="w")
-        self.recent_tree.column("nom", width=240, anchor="w")
-        self.recent_tree.column("branche", width=220, anchor="w")
-        self.recent_tree.column("genre", width=120, anchor="center")
-        self.recent_tree.grid(row=0, column=0, sticky="nsew")
+        headings = ("Code Massar", "Nom français", "Branche", "Genre")
+        widths = (150, 250, 220, 100)
+        self.recent_tree = self._build_treeview(table_card, columns, headings, widths, row=1, height=9)
 
-        scrollbar = ttk.Scrollbar(recent_box, orient=tk.VERTICAL, command=self.recent_tree.yview)
-        scrollbar.grid(row=0, column=1, sticky="ns")
-        self.recent_tree.configure(yscrollcommand=scrollbar.set)
+    # ──────────────────────────────────────────────────────────
+    # Students Page
+    # ──────────────────────────────────────────────────────────
+    def build_student_page(self):
+        page = self._create_page("students")
+        self._page_title(page, "Étudiants", "Ajouter et gérer les étudiants")
 
-    def create_student_tab(self):
-        frame = self.create_tab("Étudiants")
-        form = ttk.LabelFrame(frame, text="Ajouter un étudiant", padding=18)
-        form.grid(row=0, column=0, sticky="nsew")
-        form.columnconfigure(1, weight=1)
+        card = self._card(page, row=1)
+        card.columnconfigure(1, weight=1)
 
-        self.add_entry(form, "student_code", "Code Massar", 0)
-        self.add_entry(form, "student_ar_name", "Nom arabe", 1)
-        self.add_entry(form, "student_fr_name", "Nom français", 2)
-        self.add_combobox(form, "student_gender", "Genre", 3, values=("Homme", "Femme"))
-        self.add_entry(form, "student_birthplace", "Lieu de naissance", 4)
+        self._section_label(card, f"{ICONS['add']}  Ajouter un étudiant", row=0)
+        self._form_entry(card, "student_code", "Code Massar", 1, placeholder="Ex: M130099095")
+        self._form_entry(card, "student_ar_name", "Nom arabe", 2, placeholder="الاسم بالعربية")
+        self._form_entry(card, "student_fr_name", "Nom français", 3, placeholder="Nom et prénom")
+        self._form_combobox(card, "student_gender", "Genre", 4, values=("Homme", "Femme"))
+        self._form_entry(card, "student_birthplace", "Lieu de naissance", 5, placeholder="Ville")
 
-        ttk.Label(form, text="Date de naissance").grid(row=5, column=0, sticky="w", padx=(0, 16), pady=8)
+        # Date de naissance
+        self._form_label(card, "Date de naissance", 6)
         if DateEntry:
-            birth_date = DateEntry(form, date_pattern="yyyy-mm-dd", width=18)
+            birth_date = DateEntry(card, date_pattern="yyyy-mm-dd", width=18)
         else:
-            birth_date = ttk.Entry(form)
+            birth_date = ctk.CTkEntry(
+                card,
+                fg_color=COLORS["bg_input"],
+                border_color=COLORS["border"],
+                text_color=COLORS["text_primary"],
+                placeholder_text="AAAA-MM-JJ",
+                placeholder_text_color=COLORS["text_muted"],
+                corner_radius=8,
+                height=38,
+                font=("Segoe UI", 11),
+            )
             birth_date.insert(0, datetime.now().strftime("%Y-%m-%d"))
-        birth_date.grid(row=5, column=1, sticky="ew", pady=8)
+        birth_date.grid(row=6, column=1, sticky="ew", pady=7)
         self.inputs["student_birth_date"] = birth_date
 
-        self.add_combobox(form, "student_branch", "Branche", 6)
-        ttk.Button(form, text="Ajouter l'étudiant", style="Accent.TButton", command=self.submit_student).grid(
-            row=7, column=0, columnspan=2, sticky="e", pady=(18, 0)
-        )
+        self._form_combobox(card, "student_branch", "Branche", 7)
+        self._accent_button(card, f"{ICONS['add']}  Ajouter l'étudiant", self.submit_student, row=8, column=0, colspan=2, pady=(20, 4))
 
-    def create_branch_tab(self):
-        frame = self.create_tab("Branches")
-        form = ttk.LabelFrame(frame, text="Ajouter une branche", padding=18)
-        form.grid(row=0, column=0, sticky="nsew")
-        form.columnconfigure(1, weight=1)
+    # ──────────────────────────────────────────────────────────
+    # Branches Page
+    # ──────────────────────────────────────────────────────────
+    def build_branch_page(self):
+        page = self._create_page("branches")
+        self._page_title(page, "Branches", "Gérer les filières d'études")
 
-        self.add_entry(form, "branch_name", "Nom de la branche", 0)
-        ttk.Button(form, text="Ajouter la branche", style="Accent.TButton", command=self.submit_branch).grid(
-            row=1, column=0, columnspan=2, sticky="e", pady=(18, 0)
-        )
+        card = self._card(page, row=1)
+        card.columnconfigure(1, weight=1)
 
-    def create_subject_tab(self):
-        frame = self.create_tab("Matières")
-        form = ttk.LabelFrame(frame, text="Ajouter une matière", padding=18)
-        form.grid(row=0, column=0, sticky="nsew")
-        form.columnconfigure(1, weight=1)
+        self._section_label(card, f"{ICONS['add']}  Ajouter une branche", row=0)
+        self._form_entry(card, "branch_name", "Nom de la branche", 1, placeholder="Ex: Sciences Mathématiques")
+        self._accent_button(card, f"{ICONS['add']}  Ajouter la branche", self.submit_branch, row=2, column=0, colspan=2, pady=(20, 4))
 
-        self.add_entry(form, "subject_name", "Nom de la matière", 0)
-        self.add_entry(form, "subject_coefficient", "Coefficient", 1)
-        ttk.Button(form, text="Ajouter la matière", style="Accent.TButton", command=self.submit_subject).grid(
-            row=2, column=0, columnspan=2, sticky="e", pady=(18, 0)
-        )
+    # ──────────────────────────────────────────────────────────
+    # Subjects Page
+    # ──────────────────────────────────────────────────────────
+    def build_subject_page(self):
+        page = self._create_page("subjects")
+        self._page_title(page, "Matières", "Gérer les matières et coefficients")
 
-    def create_grade_tab(self):
-        frame = self.create_tab("Notes")
-        form = ttk.LabelFrame(frame, text="Ajouter ou remplacer une note", padding=18)
-        form.grid(row=0, column=0, sticky="nsew")
-        form.columnconfigure(1, weight=1)
+        card = self._card(page, row=1)
+        card.columnconfigure(1, weight=1)
 
-        self.add_combobox(form, "grade_student", "Code Massar", 0)
-        self.add_combobox(form, "grade_subject", "Matière", 1)
-        self.add_entry(form, "grade_value", "Note / 20", 2)
-        ttk.Button(form, text="Enregistrer la note", style="Accent.TButton", command=self.submit_grade).grid(
-            row=3, column=0, columnspan=2, sticky="e", pady=(18, 0)
-        )
+        self._section_label(card, f"{ICONS['add']}  Ajouter une matière", row=0)
+        self._form_entry(card, "subject_name", "Nom de la matière", 1, placeholder="Ex: Mathématiques")
+        self._form_entry(card, "subject_coefficient", "Coefficient", 2, placeholder="Ex: 4")
+        self._accent_button(card, f"{ICONS['add']}  Ajouter la matière", self.submit_subject, row=3, column=0, colspan=2, pady=(20, 4))
 
-    def create_ranking_tab(self):
-        frame = self.create_tab("Classements")
-        frame.columnconfigure(0, weight=1)
-        frame.rowconfigure(1, weight=1)
+    # ──────────────────────────────────────────────────────────
+    # Grades Page
+    # ──────────────────────────────────────────────────────────
+    def build_grade_page(self):
+        page = self._create_page("grades")
+        self._page_title(page, "Notes", "Saisir et modifier les notes")
 
-        controls = ttk.LabelFrame(frame, text="Classement par branche", padding=14)
-        controls.grid(row=0, column=0, sticky="ew", pady=(0, 14))
+        card = self._card(page, row=1)
+        card.columnconfigure(1, weight=1)
+
+        self._section_label(card, f"{ICONS['add']}  Ajouter ou remplacer une note", row=0)
+        self._form_combobox(card, "grade_student", "Code Massar", 1)
+        self._form_combobox(card, "grade_subject", "Matière", 2)
+        self._form_entry(card, "grade_value", "Note / 20", 3, placeholder="Entre 0 et 20")
+        self._accent_button(card, "💾  Enregistrer la note", self.submit_grade, row=4, column=0, colspan=2, pady=(20, 4))
+
+    # ──────────────────────────────────────────────────────────
+    # Ranking Page
+    # ──────────────────────────────────────────────────────────
+    def build_ranking_page(self):
+        page = self._create_page("ranking")
+        page.rowconfigure(2, weight=1)
+        self._page_title(page, "Classements", "Classement des étudiants par branche")
+
+        # Controls
+        controls = self._card(page, row=1, pady=(0, 14))
         controls.columnconfigure(1, weight=1)
-        self.add_combobox(controls, "ranking_branch", "Branche", 0)
-        ttk.Button(controls, text="Afficher", style="Accent.TButton", command=self.show_student_by_branch).grid(
-            row=0, column=2, sticky="e", padx=(12, 0)
-        )
 
-        table_box = ttk.Frame(frame, style="Panel.TFrame")
-        table_box.grid(row=1, column=0, sticky="nsew")
-        table_box.rowconfigure(0, weight=1)
-        table_box.columnconfigure(0, weight=1)
+        tk.Label(
+            controls,
+            text="Branche",
+            bg=COLORS["bg_card"],
+            fg=COLORS["text_secondary"],
+            font=("Segoe UI", 10),
+            anchor="w",
+        ).grid(row=0, column=0, sticky="w", padx=(0, 16))
+
+        self._form_combobox(controls, "ranking_branch", "", 0)
+        # Fix: remove the label that _form_combobox added
+        for widget in controls.grid_slaves(row=0, column=0):
+            if isinstance(widget, tk.Label) and widget.cget("text") == "":
+                widget.destroy()
+                break
+
+        tk.Label(
+            controls,
+            text="Branche",
+            bg=COLORS["bg_card"],
+            fg=COLORS["text_secondary"],
+            font=("Segoe UI", 10),
+        ).grid(row=0, column=0, sticky="w", padx=(0, 16))
+
+        self._accent_button(controls, f"{ICONS['search']}  Afficher", self.show_student_by_branch, row=0, column=2, pady=(0, 0), padx=(12, 0))
+
+        # Table
+        table_card = self._card(page, row=2, pady=(0, 0))
+        table_card.columnconfigure(0, weight=1)
+        table_card.rowconfigure(0, weight=1)
 
         columns = ("rank", "code", "arabic", "french", "average", "status")
-        self.ranking_tree = ttk.Treeview(table_box, columns=columns, show="headings")
-        headings = {
-            "rank": "Rang",
-            "code": "Code Massar",
-            "arabic": "Nom arabe",
-            "french": "Nom français",
-            "average": "Moyenne",
-            "status": "Validation",
-        }
-        widths = {
-            "rank": 70,
-            "code": 150,
-            "arabic": 170,
-            "french": 220,
-            "average": 100,
-            "status": 120,
-        }
-        for col in columns:
-            self.ranking_tree.heading(col, text=headings[col])
-            self.ranking_tree.column(col, width=widths[col], anchor="center" if col in {"rank", "average", "status"} else "w")
-        self.ranking_tree.tag_configure("success", foreground=COLORS["success"])
-        self.ranking_tree.tag_configure("danger", foreground=COLORS["danger"])
-        self.ranking_tree.grid(row=0, column=0, sticky="nsew")
+        headings = ("Rang", "Code Massar", "Nom arabe", "Nom français", "Moyenne", "Validation")
+        widths = (70, 150, 170, 220, 100, 120)
+        self.ranking_tree = self._build_treeview(table_card, columns, headings, widths, height=12)
 
-        y_scroll = ttk.Scrollbar(table_box, orient=tk.VERTICAL, command=self.ranking_tree.yview)
-        y_scroll.grid(row=0, column=1, sticky="ns")
-        self.ranking_tree.configure(yscrollcommand=y_scroll.set)
+    # ──────────────────────────────────────────────────────────
+    # Statistics Page
+    # ──────────────────────────────────────────────────────────
+    def build_statistics_page(self):
+        page = self._create_page("statistics")
+        page.rowconfigure(2, weight=1)
+        self._page_title(page, "Statistiques", "Analyse des performances par branche")
 
-    def create_statistics_tab(self):
-        frame = self.create_tab("Statistiques")
-        frame.rowconfigure(1, weight=1)
-        form = ttk.LabelFrame(frame, text="Analyse par branche", padding=18)
-        form.grid(row=0, column=0, sticky="ew", pady=(0, 16))
-        form.columnconfigure(1, weight=1)
+        # Controls
+        controls = self._card(page, row=1, pady=(0, 14))
+        controls.columnconfigure(1, weight=1)
 
-        self.add_combobox(form, "stats_branch", "Branche", 0)
-        ttk.Button(form, text="Afficher les statistiques", style="Accent.TButton", command=self.calculate_branch_statistics).grid(
-            row=0, column=2, sticky="e", padx=(12, 0)
-        )
-        ttk.Button(form, text="Courbe de Gauss", style="Secondary.TButton", command=self.plot_gaussian_curve).grid(
-            row=0, column=3, sticky="e", padx=(10, 0)
-        )
-        ttk.Button(form, text="Graphiques", style="Secondary.TButton", command=self.show_validation_graphs).grid(
-            row=0, column=4, sticky="e", padx=(10, 0)
-        )
+        self._form_combobox(controls, "stats_branch", "Branche", 0)
 
-        result = ttk.LabelFrame(frame, text="Résultat", padding=18)
-        result.grid(row=1, column=0, sticky="nsew")
-        result.columnconfigure(0, weight=1)
-        result.rowconfigure(0, weight=1)
+        btn_frame = tk.Frame(controls, bg=COLORS["bg_card"])
+        btn_frame.grid(row=0, column=2, padx=(12, 0))
+
+        self._accent_button(btn_frame, "📊  Statistiques", self.calculate_branch_statistics).pack(side=tk.LEFT, padx=(0, 8))
+        self._secondary_button(btn_frame, "📈  Courbe de Gauss", self.plot_gaussian_curve).pack(side=tk.LEFT, padx=(0, 8))
+        self._secondary_button(btn_frame, "📉  Graphiques", self.show_validation_graphs).pack(side=tk.LEFT)
+
+        # Result
+        result_card = self._card(page, row=2, pady=(0, 0))
+        result_card.columnconfigure(0, weight=1)
+        result_card.rowconfigure(0, weight=1)
+
         self.stats_text = tk.Text(
-            result,
-            height=9,
+            result_card,
             wrap="word",
-            bg="#ffffff",
-            fg=COLORS["text"],
+            bg=COLORS["bg_input"],
+            fg=COLORS["text_primary"],
             relief="flat",
-            padx=12,
-            pady=12,
-            font=("Segoe UI", 10),
+            padx=16,
+            pady=16,
+            font=("Consolas", 11),
+            insertbackground=COLORS["text_primary"],
+            selectbackground=COLORS["accent"],
+            selectforeground="#ffffff",
+            borderwidth=0,
+            highlightthickness=1,
+            highlightbackground=COLORS["border"],
         )
         self.stats_text.grid(row=0, column=0, sticky="nsew")
         self.stats_text.configure(state="disabled")
 
-    def create_report_tab(self):
-        frame = self.create_tab("Relevés")
-        form = ttk.LabelFrame(frame, text="Générer un relevé de notes", padding=18)
-        form.grid(row=0, column=0, sticky="nsew")
-        form.columnconfigure(1, weight=1)
+    # ──────────────────────────────────────────────────────────
+    # Reports Page
+    # ──────────────────────────────────────────────────────────
+    def build_report_page(self):
+        page = self._create_page("reports")
+        self._page_title(page, "Relevés de Notes", "Générer un relevé PDF pour un étudiant")
 
-        self.add_combobox(form, "report_student", "Code Massar", 0)
-        ttk.Button(form, text="Créer le PDF", style="Accent.TButton", command=self.print_grade_report).grid(
-            row=1, column=0, columnspan=2, sticky="e", pady=(18, 0)
-        )
+        card = self._card(page, row=1)
+        card.columnconfigure(1, weight=1)
 
-    def create_tab(self, title):
-        frame = ttk.Frame(self.notebook, style="App.TFrame", padding=18)
-        frame.columnconfigure(0, weight=1)
-        self.notebook.add(frame, text=title)
-        return frame
+        self._section_label(card, "📄  Générer un relevé de notes", row=0)
+        self._form_combobox(card, "report_student", "Code Massar", 1)
+        self._accent_button(card, "📄  Créer le PDF", self.print_grade_report, row=2, column=0, colspan=2, pady=(20, 4))
 
-    def add_entry(self, parent, key, label, row):
-        ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", padx=(0, 16), pady=8)
-        entry = ttk.Entry(parent)
-        entry.grid(row=row, column=1, sticky="ew", pady=8)
-        self.inputs[key] = entry
-        return entry
-
-    def add_combobox(self, parent, key, label, row, values=()):
-        ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", padx=(0, 16), pady=8)
-        combo = ttk.Combobox(parent, values=values, state="readonly")
-        combo.grid(row=row, column=1, sticky="ew", pady=8)
-        self.inputs[key] = combo
-        return combo
-
+    # ──────────────────────────────────────────────────────────
+    # Form Submissions
+    # ──────────────────────────────────────────────────────────
     def value(self, key):
-        return self.inputs[key].get().strip()
+        widget = self.inputs[key]
+        if isinstance(widget, ctk.CTkComboBox):
+            return widget.get().strip()
+        elif isinstance(widget, ctk.CTkEntry):
+            return widget.get().strip()
+        elif hasattr(widget, "get"):
+            return widget.get().strip()
+        return ""
 
     def clear_inputs(self, *keys):
         for key in keys:
             widget = self.inputs[key]
-            if isinstance(widget, ttk.Combobox):
+            if isinstance(widget, ctk.CTkComboBox):
                 widget.set("")
-            else:
+            elif isinstance(widget, ctk.CTkEntry):
+                widget.delete(0, tk.END)
+            elif isinstance(widget, ttk.Combobox):
+                widget.set("")
+            elif hasattr(widget, "delete"):
                 widget.delete(0, tk.END)
 
     def submit_student(self):
@@ -437,18 +957,18 @@ class StudentManagerApp:
         nom_branche = self.value("student_branch")
 
         if not all((code_massar, nom_arabe, nom_francais, genre, lieu_naissance, date_naissance, nom_branche)):
-            self.error("Veuillez remplir tous les champs.")
+            self.show_error("Veuillez remplir tous les champs.")
             return
 
         try:
             datetime.strptime(date_naissance, "%Y-%m-%d")
         except ValueError:
-            self.error("La date de naissance doit respecter le format AAAA-MM-JJ.")
+            self.show_error("La date de naissance doit respecter le format AAAA-MM-JJ.")
             return
 
         code_branche = self.get_branch_code(nom_branche)
         if not code_branche:
-            self.error("La branche sélectionnée n'existe pas.")
+            self.show_error("La branche sélectionnée n'existe pas.")
             return
 
         try:
@@ -464,17 +984,17 @@ class StudentManagerApp:
                     (code_massar, nom_arabe, nom_francais, genre, lieu_naissance, date_naissance, code_branche),
                 )
         except sqlite3.IntegrityError:
-            self.error("Ce code Massar existe déjà.")
+            self.show_error("Ce code Massar existe déjà.")
             return
 
-        self.success("Étudiant ajouté avec succès.")
+        self.show_success("Étudiant ajouté avec succès.")
         self.clear_inputs("student_code", "student_ar_name", "student_fr_name", "student_gender", "student_birthplace", "student_branch")
         self.refresh_all()
 
     def submit_branch(self):
         nom_branche = self.value("branch_name")
         if not nom_branche:
-            self.error("Veuillez entrer le nom de la branche.")
+            self.show_error("Veuillez entrer le nom de la branche.")
             return
 
         code_branche = self.generate_unique_code(nom_branche, "branche")
@@ -482,10 +1002,10 @@ class StudentManagerApp:
             with self.conn:
                 self.conn.execute("INSERT INTO branche (code, nom) VALUES (?, ?)", (code_branche, nom_branche))
         except sqlite3.IntegrityError:
-            self.error("Cette branche existe déjà.")
+            self.show_error("Cette branche existe déjà.")
             return
 
-        self.success(f"Branche ajoutée avec le code {code_branche}.")
+        self.show_success(f"Branche ajoutée avec le code {code_branche}.")
         self.clear_inputs("branch_name")
         self.refresh_all()
 
@@ -494,14 +1014,14 @@ class StudentManagerApp:
         coefficient_text = self.value("subject_coefficient")
 
         if not nom_matiere or not coefficient_text:
-            self.error("Veuillez remplir tous les champs.")
+            self.show_error("Veuillez remplir tous les champs.")
             return
 
         coefficient = self.parse_float(coefficient_text, "Le coefficient doit être un nombre.")
         if coefficient is None:
             return
         if coefficient <= 0:
-            self.error("Le coefficient doit être supérieur à 0.")
+            self.show_error("Le coefficient doit être supérieur à 0.")
             return
 
         code_matiere = self.generate_unique_code(nom_matiere, "matiere")
@@ -512,10 +1032,10 @@ class StudentManagerApp:
                     (code_matiere, nom_matiere, coefficient),
                 )
         except sqlite3.IntegrityError:
-            self.error("Cette matière existe déjà.")
+            self.show_error("Cette matière existe déjà.")
             return
 
-        self.success(f"Matière ajoutée avec le code {code_matiere}.")
+        self.show_success(f"Matière ajoutée avec le code {code_matiere}.")
         self.clear_inputs("subject_name", "subject_coefficient")
         self.refresh_all()
 
@@ -525,19 +1045,19 @@ class StudentManagerApp:
         note_text = self.value("grade_value")
 
         if not code_massar or not nom_matiere or not note_text:
-            self.error("Veuillez remplir tous les champs.")
+            self.show_error("Veuillez remplir tous les champs.")
             return
 
         note = self.parse_float(note_text, "La note doit être un nombre.")
         if note is None:
             return
         if not MIN_GRADE <= note <= MAX_GRADE:
-            self.error(f"La note doit être comprise entre {MIN_GRADE} et {MAX_GRADE}.")
+            self.show_error(f"La note doit être comprise entre {MIN_GRADE} et {MAX_GRADE}.")
             return
 
         code_matiere = self.get_subject_code(nom_matiere)
         if not code_matiere:
-            self.error("La matière sélectionnée n'existe pas.")
+            self.show_error("La matière sélectionnée n'existe pas.")
             return
 
         existing = self.conn.execute(
@@ -554,14 +1074,17 @@ class StudentManagerApp:
                 (code_massar, code_matiere, note),
             )
 
-        self.success("Note enregistrée avec succès.")
+        self.show_success("Note enregistrée avec succès.")
         self.clear_inputs("grade_value")
         self.refresh_all()
 
+    # ──────────────────────────────────────────────────────────
+    # Rankings & Statistics
+    # ──────────────────────────────────────────────────────────
     def show_student_by_branch(self):
         selected_branch = self.value("ranking_branch")
         if not selected_branch:
-            self.error("Veuillez sélectionner une branche.")
+            self.show_error("Veuillez sélectionner une branche.")
             return
 
         code_branche = self.get_branch_code(selected_branch)
@@ -569,23 +1092,24 @@ class StudentManagerApp:
 
         self.ranking_tree.delete(*self.ranking_tree.get_children())
         if not students:
-            self.info("Aucun étudiant avec notes trouvé pour cette branche.")
+            self.show_info("Aucun étudiant avec notes trouvé pour cette branche.")
             return
 
-        for row in students:
+        for i, row in enumerate(students):
             status = "Validé" if row["average"] >= PASSING_GRADE else "Rattrapage"
             tag = "success" if row["average"] >= PASSING_GRADE else "danger"
+            row_tag = "oddrow" if i % 2 else "evenrow"
             self.ranking_tree.insert(
                 "",
                 tk.END,
                 values=(row["rank"], row["code"], row["arabic_name"], row["french_name"], f"{row['average']:.2f}", status),
-                tags=(tag,),
+                tags=(tag, row_tag),
             )
 
     def calculate_branch_statistics(self):
         selected_branch = self.value("stats_branch")
         if not selected_branch:
-            self.error("Veuillez sélectionner une branche.")
+            self.show_error("Veuillez sélectionner une branche.")
             return
 
         code_branche = self.get_branch_code(selected_branch)
@@ -603,12 +1127,12 @@ class StudentManagerApp:
         self.set_stats_text(
             "\n".join(
                 [
-                    f"Branche : {selected_branch}",
-                    f"Nombre d'étudiants notés : {len(averages)}",
-                    f"Moyenne : {average:.2f} / 20",
-                    f"Variance : {variance:.2f}",
-                    f"Écart-type : {std_dev:.2f}",
-                    f"Taux de validation : {validation_rate:.1f} %",
+                    f"  📌  Branche : {selected_branch}",
+                    f"  👥  Nombre d'étudiants notés : {len(averages)}",
+                    f"  📊  Moyenne : {average:.2f} / 20",
+                    f"  📐  Variance : {variance:.2f}",
+                    f"  📏  Écart-type : {std_dev:.2f}",
+                    f"  ✅  Taux de validation : {validation_rate:.1f} %",
                 ]
             )
         )
@@ -619,13 +1143,13 @@ class StudentManagerApp:
 
         selected_branch = self.value("stats_branch")
         if not selected_branch:
-            self.error("Veuillez sélectionner une branche.")
+            self.show_error("Veuillez sélectionner une branche.")
             return
 
         code_branche = self.get_branch_code(selected_branch)
         rows = self.fetch_branch_averages(code_branche)
         if not rows:
-            self.info("Aucune donnée disponible pour cette branche.")
+            self.show_info("Aucune donnée disponible pour cette branche.")
             return
 
         averages = [row["average"] for row in rows]
@@ -641,7 +1165,7 @@ class StudentManagerApp:
 
         self.apply_plot_style()
         fig, axes = plt.subplots(1, 3, figsize=(16, 5))
-        fig.suptitle(f"Analyse de validation - {selected_branch}", fontsize=14, fontweight="bold")
+        fig.suptitle(f"Analyse de validation — {selected_branch}", fontsize=14, fontweight="bold")
 
         axes[0].bar(["Validé", "Rattrapage"], [valid_count, catchup_count], color=[COLORS["success"], COLORS["danger"]])
         axes[0].set_title("Validation globale")
@@ -672,13 +1196,13 @@ class StudentManagerApp:
 
         selected_branch = self.value("stats_branch")
         if not selected_branch:
-            self.error("Veuillez sélectionner une branche.")
+            self.show_error("Veuillez sélectionner une branche.")
             return
 
         code_branche = self.get_branch_code(selected_branch)
         averages = [row["average"] for row in self.fetch_branch_averages(code_branche)]
         if not averages:
-            self.info("Aucune donnée disponible pour cette branche.")
+            self.show_info("Aucune donnée disponible pour cette branche.")
             return
 
         mean = float(np.mean(averages))
@@ -695,7 +1219,7 @@ class StudentManagerApp:
             plt.fill_between(x, y, color=COLORS["accent"], alpha=0.12)
 
         plt.axvline(PASSING_GRADE, color=COLORS["danger"], linestyle="--", linewidth=2, label="Seuil de validation")
-        plt.title(f"Distribution normale des moyennes - {selected_branch}")
+        plt.title(f"Distribution normale des moyennes — {selected_branch}")
         plt.xlabel("Moyenne")
         plt.ylabel("Densité")
         plt.xticks(np.arange(0, 21, 1))
@@ -703,37 +1227,40 @@ class StudentManagerApp:
         plt.tight_layout()
         plt.show()
 
+    # ──────────────────────────────────────────────────────────
+    # PDF Report
+    # ──────────────────────────────────────────────────────────
     def print_grade_report(self):
         if canvas is None:
-            self.error("Le module reportlab n'est pas installé. Installez les dépendances pour générer les PDF.")
+            self.show_error("Le module reportlab n'est pas installé. Installez les dépendances pour générer les PDF.")
             return
 
         code_massar = self.value("report_student")
         if not code_massar:
-            self.error("Veuillez sélectionner un code Massar.")
+            self.show_error("Veuillez sélectionner un code Massar.")
             return
 
         student = self.fetch_student(code_massar)
         if not student:
-            self.error("Aucun étudiant trouvé avec ce code Massar.")
+            self.show_error("Aucun étudiant trouvé avec ce code Massar.")
             return
 
         notes = self.fetch_student_notes(code_massar)
         if not notes:
-            self.info("Aucune note trouvée pour cet étudiant.")
+            self.show_info("Aucune note trouvée pour cet étudiant.")
             return
 
         pdf_filename = BASE_DIR / f"releve_de_notes_{code_massar}.pdf"
         try:
             self.generate_grade_pdf(pdf_filename, student, notes)
         except OSError as exc:
-            self.error(f"Erreur d'écriture du fichier PDF : {exc}")
+            self.show_error(f"Erreur d'écriture du fichier PDF : {exc}")
             return
         except Exception as exc:
-            self.error(f"Impossible de générer le PDF : {exc}")
+            self.show_error(f"Impossible de générer le PDF : {exc}")
             return
 
-        self.success(f"Le relevé de notes a été enregistré : {pdf_filename.name}")
+        self.show_success(f"Le relevé de notes a été enregistré : {pdf_filename.name}")
         try:
             os.startfile(str(pdf_filename))
         except OSError:
@@ -745,7 +1272,8 @@ class StudentManagerApp:
         margin_x = 1.6 * cm
         y = height - 1.6 * cm
 
-        pdf.setFillColor(colors.HexColor(COLORS["accent"]))
+        # Header
+        pdf.setFillColor(colors.HexColor("#6c63ff"))
         pdf.rect(0, height - 3.1 * cm, width, 3.1 * cm, fill=1, stroke=0)
         pdf.setFillColor(colors.white)
         pdf.setFont("Helvetica-Bold", 18)
@@ -755,7 +1283,7 @@ class StudentManagerApp:
         pdf.drawRightString(width - margin_x, height - 2.15 * cm, datetime.now().strftime("%d/%m/%Y"))
 
         y -= 3.0 * cm
-        pdf.setFillColor(colors.HexColor(COLORS["text"]))
+        pdf.setFillColor(colors.HexColor("#1f2937"))
         pdf.setFont("Helvetica-Bold", 11)
         pdf.drawString(margin_x, y, student["french_name"])
         pdf.setFont("Helvetica", 10)
@@ -805,9 +1333,9 @@ class StudentManagerApp:
         general_status = "VALIDÉ" if average >= PASSING_GRADE else "RATTRAPAGE"
 
         y -= 0.55 * cm
-        pdf.setFillColor(colors.HexColor(COLORS["header"]))
+        pdf.setFillColor(colors.HexColor("#eef7fa"))
         pdf.roundRect(margin_x, y - 2.15 * cm, width - 2 * margin_x, 2.15 * cm, 6, fill=1, stroke=0)
-        pdf.setFillColor(colors.HexColor(COLORS["text"]))
+        pdf.setFillColor(colors.HexColor("#1f2937"))
         pdf.setFont("Helvetica-Bold", 11)
         pdf.drawString(margin_x + 0.35 * cm, y - 0.55 * cm, f"Moyenne générale : {average:.2f} / 20")
         pdf.drawString(margin_x + 0.35 * cm, y - 1.15 * cm, f"Remarque générale : {general_status}")
@@ -820,14 +1348,14 @@ class StudentManagerApp:
             pdf.drawImage(signature, width - 6.0 * cm, 1.0 * cm, width=4.5 * cm, height=2.4 * cm, mask="auto")
 
         pdf.setFont("Helvetica", 8)
-        pdf.setFillColor(colors.HexColor(COLORS["muted"]))
+        pdf.setFillColor(colors.HexColor("#6b7280"))
         pdf.drawString(margin_x, 1.1 * cm, "Document généré automatiquement.")
         pdf.save()
 
     def draw_pdf_table_header(self, pdf, columns, y, row_height):
         table_x = columns[0][1]
         table_width = max(x + col_width for _, x, col_width in columns) - table_x
-        pdf.setFillColor(colors.HexColor(COLORS["accent"]))
+        pdf.setFillColor(colors.HexColor("#6c63ff"))
         pdf.rect(table_x, y - row_height + 0.1 * cm, table_width, row_height, fill=1, stroke=0)
         pdf.setFillColor(colors.white)
         pdf.setFont("Helvetica-Bold", 9)
@@ -835,21 +1363,24 @@ class StudentManagerApp:
             pdf.drawString(x + 0.15 * cm, y - 0.42 * cm, title)
 
     def draw_pdf_table_row(self, pdf, columns, values, y, row_height):
-        pdf.setStrokeColor(colors.HexColor(COLORS["border"]))
-        pdf.setFillColor(colors.HexColor(COLORS["text"]))
+        pdf.setStrokeColor(colors.HexColor("#d9e2ec"))
+        pdf.setFillColor(colors.HexColor("#1f2937"))
         pdf.setFont("Helvetica", 9)
         for (_, x, col_width), value in zip(columns, values):
             pdf.rect(x, y - row_height + 0.1 * cm, col_width, row_height, fill=0, stroke=1)
             clipped = self.clip_text(str(value), 34 if col_width > 5 * cm else 14)
             pdf.drawString(x + 0.15 * cm, y - 0.42 * cm, clipped)
 
+    # ──────────────────────────────────────────────────────────
+    # Refresh & Helpers
+    # ──────────────────────────────────────────────────────────
     def refresh_all(self):
         self.update_combobox_values()
         self.refresh_dashboard()
 
     def ensure_plot_dependencies(self):
         if plt is None or np is None:
-            self.error("Les modules matplotlib et numpy ne sont pas installés. Installez les dépendances pour afficher les graphiques.")
+            self.show_error("Les modules matplotlib et numpy ne sont pas installés.")
             return False
         return True
 
@@ -869,11 +1400,14 @@ class StudentManagerApp:
         student_keys = ("grade_student", "report_student")
 
         for key in branch_keys:
-            self.inputs[key]["values"] = branches
+            if key in self.inputs:
+                self.inputs[key].configure(values=branches)
         for key in subject_keys:
-            self.inputs[key]["values"] = subjects
+            if key in self.inputs:
+                self.inputs[key].configure(values=subjects)
         for key in student_keys:
-            self.inputs[key]["values"] = students
+            if key in self.inputs:
+                self.inputs[key].configure(values=students)
 
     def refresh_dashboard(self):
         self.metric_vars["students_count"].set(str(self.count("etudiant")))
@@ -884,6 +1418,9 @@ class StudentManagerApp:
         self.metric_vars["global_average"].set(f"{sum(averages) / len(averages):.2f}" if averages else "0.00")
 
         self.recent_tree.delete(*self.recent_tree.get_children())
+        # Temporarily switch row_factory for simple tuple access
+        old_factory = self.conn.row_factory
+        self.conn.row_factory = None
         rows = self.conn.execute(
             """
             SELECT e.code_massar, e.nom_francais, COALESCE(b.nom, '-'), e.genre
@@ -891,11 +1428,17 @@ class StudentManagerApp:
             LEFT JOIN branche b ON b.code = e.code_branche
             ORDER BY e.rowid DESC
             LIMIT 12
-            """
+            """,
         ).fetchall()
-        for row in rows:
-            self.recent_tree.insert("", tk.END, values=row)
+        self.conn.row_factory = old_factory
 
+        for i, row in enumerate(rows):
+            tag = "oddrow" if i % 2 else "evenrow"
+            self.recent_tree.insert("", tk.END, values=row, tags=(tag,))
+
+    # ──────────────────────────────────────────────────────────
+    # Database Queries
+    # ──────────────────────────────────────────────────────────
     def fetch_student(self, code_massar):
         row = self.conn.execute(
             """
@@ -991,7 +1534,7 @@ class StudentManagerApp:
             JOIN note n ON n.code_massar = e.code_massar
             JOIN matiere m ON m.code = n.code_matiere
             GROUP BY e.code_massar
-            """
+            """,
         ).fetchall()
         return [{"code": row[0], "average": float(row[1])} for row in rows]
 
@@ -1036,7 +1579,7 @@ class StudentManagerApp:
         try:
             return float(text.replace(",", "."))
         except ValueError:
-            self.error(error_message)
+            self.show_error(error_message)
             return None
 
     def set_stats_text(self, text):
@@ -1048,21 +1591,30 @@ class StudentManagerApp:
     def clip_text(self, text, max_chars):
         return text if len(text) <= max_chars else f"{text[:max_chars - 1]}…"
 
-    def success(self, message):
-        messagebox.showinfo("Succès", message)
+    # ──────────────────────────────────────────────────────────
+    # Toast Notification Wrappers
+    # ──────────────────────────────────────────────────────────
+    def show_success(self, message):
+        self.toast.show(message, "success")
 
-    def info(self, message):
-        messagebox.showinfo("Information", message)
+    def show_error(self, message):
+        self.toast.show(message, "error", duration=4500)
 
-    def error(self, message):
-        messagebox.showerror("Erreur", message)
+    def show_info(self, message):
+        self.toast.show(message, "info")
 
     def close(self):
         self.conn.close()
         self.root.destroy()
 
 
+# ──────────────────────────────────────────────────────────────
+# Entry Point
+# ──────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    root = tk.Tk()
+    ctk.set_appearance_mode("dark")
+    ctk.set_default_color_theme("blue")
+
+    root = ctk.CTk()
     app = StudentManagerApp(root)
     root.mainloop()
